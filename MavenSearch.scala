@@ -6,19 +6,14 @@ import java.net._
 import java.text.SimpleDateFormat
 import java.time._ 
 import java.util.Date
-import java.util.Scanner
-import scala.collection.immutable
-import scala.util.matching.Regex
 import scala.util.parsing.json._ 
-
-abstract class SearchResult
 
 case class CoordinateResult(
   groupId: String,
   artifactId: String,
   version: String,
   timestamp: LocalDateTime
-) extends SearchResult
+)
 
 case class ClassnameResult(
   groupId: String,
@@ -26,7 +21,7 @@ case class ClassnameResult(
   latestVersion: String,
   timestamp: LocalDateTime,
   versionCount: Double
-) extends SearchResult
+)
 
 case class Coordinate(
   groupId: String,
@@ -95,20 +90,27 @@ object MavenSearch {
     CoordinateResult (
       packageMap("g").asInstanceOf[String], 
       packageMap("a").asInstanceOf[String], 
-      "",//packageMap("v").asInstanceOf[String], 
+      packageMap("v").asInstanceOf[String], 
       timestampToDate(packageMap("timestamp").asInstanceOf[Double])
     )  
   }
 
-  def search(query: String) : Vector[SearchResult] = {
+  def byCoordinate(query : String): Vector[CoordinateResult] = {
     val url = constructURL(query, 20, "json")
     val packageMaps = downloadPackageInfo(url)
-    if (packageMaps.head.keySet.exists(_ == "v")) { 
-      packageMaps.map(pkg => parseCoordinateResult(pkg)).to[Vector]
-    }
-    else {
-      packageMaps.map(pkg => parseClassResult(pkg)).to[Vector]
-    }
+    packageMaps.map(pkg => parseCoordinateResult(pkg)).to[Vector]
+  }
+
+  def byClassname(query : String): Vector[ClassnameResult] = {
+    val url = constructURL(query, 20, "json")
+    val packageMaps = downloadPackageInfo(url)
+    packageMaps.map(pkg => parseClassResult(pkg)).to[Vector]
+  }
+
+  def basicsearch(query: String) : Vector[ClassnameResult] = {
+    val url = constructURL(query, 20, "json")
+    val packageMaps = downloadPackageInfo(url)
+    packageMaps.map(pkg => parseClassResult(pkg)).to[Vector]
   }
 
   def downloadPackageInfo(searchUrl : String) : List[PackageMap] = {
@@ -160,7 +162,12 @@ object MavenSearch {
       } else {
         args(0)
       }
-    val result = search(searchTerm)
+    
+    val result = if (v != "" || fc != "") {
+      byCoordinate(searchTerm)
+    } else {
+      basicsearch(searchTerm)
+    }
 
     result.map (x => println(x))
   }
