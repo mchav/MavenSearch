@@ -134,7 +134,7 @@ object MavenSearch {
       case v => v.toString
     }
     val inline = string.replace("\n", " ").replaceAll(" +"," ")
-    if(inline.replaceAll("[\\p{C}]","").size < 120) inline else string
+    if(inline.replaceAll("[\\p{C}]","").size < 140) inline else string
   }
 
   def downloadPackageInfo[T](searchUrl : String, typeResult: Map[String, Any] => T) : Vector[T] = {
@@ -154,8 +154,14 @@ object MavenSearch {
         Map[String,
           Map[String,
             List[Map[String, Any]
-      ]]]]("response")("docs")
-        .map(typeResult).to[Vector]
+      ]]]]("response")("docs").map( entry =>
+        try{
+          typeResult(entry)
+        } catch {
+          case e:java.util.NoSuchElementException => throw new Exception( "Could not parse entry:\n" + prettyPrint(entry), e )
+        }
+      ).to[Vector]
+      
     } catch{
       case e:java.util.NoSuchElementException => throw new Exception( "Could not parse results:\n" + prettyPrint(json), e )
     }
