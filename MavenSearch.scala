@@ -32,15 +32,13 @@ case class Coordinate(
 )
 
 object MavenSearch {
-  type PackageMap = Map[String, Any]
-
-  val baseUrl = "http://search.maven.org/solrsearch/select?"
-  val charset = java.nio.charset.StandardCharsets.UTF_8.name()
+  private val baseUrl = "http://search.maven.org/solrsearch/select?"
+  private val charset = java.nio.charset.StandardCharsets.UTF_8.name()
 
   /*
    * converts the cases of a coordinate into a search string
    */
-  def showCoordinate (c : Coordinate) : String = {
+  private def showCoordinate (c : Coordinate) : String = {
     val group = if (c.groupId != "") {
     String.format("g:\"%s\" ", c.groupId)
     } else ""
@@ -56,7 +54,7 @@ object MavenSearch {
     return String.format("%s%s%s", group, artifact, version)
   }
 
-  def constructURL (queryString : String, hits : Int, resultType: String) : String = {
+  private def constructURL (queryString : String, hits : Int, resultType: String) : String = {
     val rows = String.valueOf(hits)
     val wt = resultType
 
@@ -69,51 +67,77 @@ object MavenSearch {
     complete
   }
 
-  def timestampToDate(time: Double) : LocalDateTime = {
+  private def timestampToDate(time: Double) : LocalDateTime = {
     val timeLong = (time).toLong
     val timeDate = new Date(timeLong)
     val timeDateStr = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(timeDate)
     LocalDateTime.parse(timeDateStr.replace(' ', 'T'))
   } 
 
-  def parseClassResult(packageMap : PackageMap) : ClassnameResult = {
+
+  def byCoordinate(query : String): Vector[CoordinateResult] = {
+    val url = constructURL(query, 20, "json")
+    downloadPackageInfo(
+      url,
+      packageMap =>
+        CoordinateResult (
+          packageMap("g").asInstanceOf[String], 
+          packageMap("a").asInstanceOf[String], 
+          packageMap("v").asInstanceOf[String], 
+          timestampToDate(packageMap("timestamp").asInstanceOf[Double])
+        )
+    )
+  }
+
+  private def parseClassResult(packageMap : Map[String, Any]) : ClassnameResult = {
     ClassnameResult (
       packageMap("g").asInstanceOf[String], 
       packageMap("a").asInstanceOf[String], 
       packageMap("latestVersion").asInstanceOf[String], 
       timestampToDate(packageMap("timestamp").asInstanceOf[Double]), 
       packageMap("versionCount").asInstanceOf[Double]
-    )  
-  }
-
-  def parseCoordinateResult(packageMap : PackageMap) : CoordinateResult = {
-    CoordinateResult (
-      packageMap("g").asInstanceOf[String], 
-      packageMap("a").asInstanceOf[String], 
-      packageMap("v").asInstanceOf[String], 
-      timestampToDate(packageMap("timestamp").asInstanceOf[Double])
-    )  
-  }
-
-  def byCoordinate(query : String): Vector[CoordinateResult] = {
-    val url = constructURL(query, 20, "json")
-    val packageMaps = downloadPackageInfo(url)
-    packageMaps.map(pkg => parseCoordinateResult(pkg)).to[Vector]
+    ) 
   }
 
   def byClassname(query : String): Vector[ClassnameResult] = {
     val url = constructURL(query, 20, "json")
-    val packageMaps = downloadPackageInfo(url)
-    packageMaps.map(pkg => parseClassResult(pkg)).to[Vector]
+    downloadPackageInfo(url, parseClassResult)
   }
 
-  def basicsearch(query: String) : Vector[ClassnameResult] = {
+  def basic(query: String) : Vector[ClassnameResult] = {
     val url = constructURL(query, 20, "json")
-    val packageMaps = downloadPackageInfo(url)
-    packageMaps.map(pkg => parseClassResult(pkg)).to[Vector]
+    downloadPackageInfo(url, parseClassResult)
+  }
+ 
+  private def red( s: String ) = Console.RED + s + Console.RESET
+  private def green( s: String ) = Console.GREEN + s + Console.RESET
+  private def blue( s: String ) = Console.BLUE + s + Console.RESET
+
+  private def prettyPrint(json: Any, indent: Int = 0): String = {
+    val space = ("  "*indent)
+    val string: String = json match {
+      case m:Map[_,_] =>
+        lazy val align = " " * m.keys.map(_.toString.size).max
+        val elements =  m.map{
+          case (key, value) => "\n" + space + "  " + key + ": " + align.take(align.size - key.toString. size) + prettyPrint(value, indent+1)
+        }.mkString(",")
+        "{" + (if(elements.size > 0) elements +"\n" + space else "") + "}"
+      case m:List[_] => 
+        val elements = m.map{
+          case value => "\n" + space + "  " + prettyPrint(value, indent+1)
+        }.mkString(",")
+        "[" + (if(elements.size > 0) elements +"\n" + space else "")  + "]"
+      case v: String => red("\"" + v + "\"")
+      case v: Int => blue(v.toString)
+      case v: Float => green(v.toString)
+      case v: Double => green(v.toString)
+      case v => v.toString
+    }
+    val inline = string.replace("\n", " ").replaceAll(" +"," ")
+    if(inline.replaceAll("[\\p{C}]","").size < 120) inline else string
   }
 
-  def downloadPackageInfo(searchUrl : String) : List[PackageMap] = {
+  def downloadPackageInfo[T](searchUrl : String, typeResult: Map[String, Any] => T) : Vector[T] = {
     val myURL = new URL(searchUrl)
     val myURLConnection = myURL.openConnection()
     myURLConnection.connect()
@@ -123,9 +147,18 @@ object MavenSearch {
     val s = new java.util.Scanner(stream).useDelimiter("\\A");
     val res = s.next()
 
-    val packages = JSON.parseFull(res)
+    val json = JSON.parseFull(res).getOrElse( throw new Exception( "Could not parse json: " + res ) )
 
-    packages.get.asInstanceOf[PackageMap]("response").asInstanceOf[Map[String, List[PackageMap]]]("docs")
+    try{
+      json.asInstanceOf[
+        Map[String,
+          Map[String,
+            List[Map[String, Any]
+      ]]]]("response")("docs")
+        .map(typeResult).to[Vector]
+    } catch{
+      case e:java.util.NoSuchElementException => throw new Exception( "Could not parse results:\n" + prettyPrint(json), e )
+    }
   }
 
   def main(args : Array[String]) : Unit = {
@@ -166,7 +199,7 @@ object MavenSearch {
     val result = if (v != "" || fc != "") {
       byCoordinate(searchTerm)
     } else {
-      basicsearch(searchTerm)
+      basic(searchTerm)
     }
 
     result.map (x => println(x))
