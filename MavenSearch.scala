@@ -107,7 +107,7 @@ object MavenSearch {
     packageMaps.map(pkg => parseClassResult(pkg)).to[Vector]
   }
 
-  def basicsearch(query: String) : Vector[ClassnameResult] = {
+  def basic(query: String) : Vector[ClassnameResult] = {
     val url = constructURL(query, 20, "json")
     val packageMaps = downloadPackageInfo(url)
     packageMaps.map(pkg => parseClassResult(pkg)).to[Vector]
@@ -166,7 +166,7 @@ object MavenSearch {
     val result = if (v != "" || fc != "") {
       byCoordinate(searchTerm)
     } else {
-      basicsearch(searchTerm)
+      basic(searchTerm)
     }
 
     result.map (x => println(x))
