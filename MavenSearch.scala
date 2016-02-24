@@ -1,7 +1,5 @@
 package chavxo.maven_search
 
-// TODO: use scopt as an Option parser
-
 import java.net._ 
 import java.text.SimpleDateFormat
 import java.time._ 
@@ -167,12 +165,34 @@ object MavenSearch {
     }
   }
 
-  def main(args : Array[String]) : Unit = {
-    if (args.length == 0 || args(0) == "--help") {
+  def printOptions() : Unit = {
       println("Maven Search tool 0.0.1\n\tUsage: scala MavenSearch [package name]")
       println("\t       scala MavenSearch [option] [argument]")
       println("\nOptions:")
-      println("\t-g \tsearch for a group\n\t-fc \tsearch for a classname\n")    
+      println("\t-g \tsearch for a group\n\t-fc \tsearch for a classname\n")
+  }
+
+  def showResults(results : Vector[ClassnameResult]) : String = {
+    //var grouped = null : Vector[Vector[ClassnameResult]]
+    //println(results)
+    var res = ""
+    val grouped = results.groupBy(x => x.groupId) //.map(x => x.groupBy(y => y.artifactId.takeWhile(_ != '_')))
+    for (key <- grouped.keySet) {
+      res += key + "\n"
+      val regrouped = grouped(key).groupBy(x => x.artifactId)
+      for (pkg <- regrouped.keySet) {
+        res += "  " + pkg + "\n"
+        res += "    " + regrouped(pkg).map(x => x.latestVersion).toString() + "\n"
+      }
+
+    }
+    println(res)
+    return ""
+  }
+
+  def main(args : Array[String]) : Unit = {
+    if (args.length == 0 || args(0) == "--help") {
+      printOptions()
       return
     }
 
@@ -208,6 +228,12 @@ object MavenSearch {
       basic(searchTerm)
     }
 
-    result.map (x => println(x))
+    showResults(basic(searchTerm))
+
+    result match {
+      case IndexedSeq() => println("Search returned no results")
+      case _            => result.map (x => println(x))
+    }
+    
   }
 }
