@@ -1,4 +1,6 @@
-package chavxo.maven_search
+//package chavxo.maven_search
+
+// TODO: Optional search with OR
 
 import java.net._ 
 import java.text.SimpleDateFormat
@@ -20,6 +22,9 @@ case class ClassnameResult(
   timestamp: LocalDateTime,
   versionCount: Double
 )
+
+case class ClassVector(value: Vector[ClassnameResult])
+case class CoordVector(value: Vector[CoordinateResult])
 
 case class Coordinate(
   groupId: String,
@@ -73,9 +78,9 @@ object MavenSearch {
   } 
 
 
-  def byCoordinate(query : String): Vector[CoordinateResult] = {
-    val url = constructURL(query, 20, "json")
-    downloadPackageInfo(
+  def byCoordinate(query : String, forceVersions : Boolean): CoordVector = {
+    val url = constructURL(query, 20, "json") + (if (forceVersions) "&core=gav" else "")
+    val res = downloadPackageInfo(
       url,
       packageMap =>
         CoordinateResult (
@@ -85,6 +90,7 @@ object MavenSearch {
           timestampToDate(packageMap("timestamp").asInstanceOf[Double])
         )
     )
+    CoordVector(res)
   }
 
   private def parseClassResult(packageMap : Map[String, Any]) : ClassnameResult = {
@@ -97,14 +103,17 @@ object MavenSearch {
     ) 
   }
 
-  def byClassname(query : String): Vector[ClassnameResult] = {
+  def byClassname(query : String): ClassVector = {
     val url = constructURL(query, 20, "json")
-    downloadPackageInfo(url, parseClassResult)
+    val res = downloadPackageInfo(url, parseClassResult)
+    ClassVector(res)
   }
 
-  def basic(query: String) : Vector[ClassnameResult] = {
+  def basic(query: String) : ClassVector = {
     val url = constructURL(query, 20, "json")
-    downloadPackageInfo(url, parseClassResult)
+    //println(url)
+    val res = downloadPackageInfo(url, parseClassResult)
+    ClassVector(res)
   }
  
   private def red( s: String ) = Console.RED + s + Console.RESET
@@ -165,14 +174,14 @@ object MavenSearch {
     }
   }
 
-  def printOptions() : Unit = {
+  private def printOptions() : Unit = {
       println("Maven Search tool 0.0.1\n\tUsage: scala MavenSearch [package name]")
       println("\t       scala MavenSearch [option] [argument]")
       println("\nOptions:")
       println("\t-g \tsearch for a group\n\t-fc \tsearch for a classname\n")
   }
 
-  def showResults(results : Vector[ClassnameResult]) : String = {
+  def showClassResults(results : Vector[ClassnameResult]) : String = {
     //var grouped = null : Vector[Vector[ClassnameResult]]
     //println(results)
     var res = ""
@@ -182,7 +191,25 @@ object MavenSearch {
       val regrouped = grouped(key).groupBy(x => x.artifactId)
       for (pkg <- regrouped.keySet) {
         res += "  " + pkg + "\n"
-        res += "    " + regrouped(pkg).map(x => x.latestVersion).toString() + "\n"
+        res += "    latest version: " + regrouped(pkg).map(x => x.latestVersion).mkString(", ") + "\n"
+      }
+
+    }
+    println(res)
+    return ""
+  }
+
+  def showCoordResults(results : Vector[CoordinateResult]) : String = {
+    //var grouped = null : Vector[Vector[ClassnameResult]]
+    //println(results)
+    var res = ""
+    val grouped = results.groupBy(x => x.groupId) //.map(x => x.groupBy(y => y.artifactId.takeWhile(_ != '_')))
+    for (key <- grouped.keySet) {
+      res += key + "\n"
+      val regrouped = grouped(key).groupBy(x => x.artifactId)
+      for (pkg <- regrouped.keySet) {
+        res += "  " + pkg + "\n"
+        res += "    " + regrouped(pkg).map(x => x.version).mkString(", ") + "\n"
       }
 
     }
@@ -199,41 +226,52 @@ object MavenSearch {
     def getOption(option : String) : String = {
       val index = args.indexOf(option)
       if (index != (-1)) 
-        return args(index + 1) 
+        return args(index + 1)
       return ""
     }
 
-    val fc = getOption("-fc")
-    val g  = getOption("-g")
-    val a  = getOption("-a")
-    val id = getOption("-id")
-    val v  = getOption("-v")
-    val p  = getOption("-p")
-    val l  = getOption("-l")
-    val c  = getOption("-c")
+    val fullyQualified = getOption("--fully-qualified")
+    val group          = getOption("--group")
+    val artifact       = getOption("--artifact")
+    val id             = getOption("--id")
+    val version        = getOption("--version-number")
+    val packaging      = getOption("--packaging")
+    val classifier     = getOption("--classifier")
+    val className      = getOption("--class")
 
-    val searchTerm = if (fc != "") {
-        String.format("fc:\"%s\"", c)
-      } else if (c != "") {
-        String.format("c:\"%s\"", c)
-      } else if (g != "" || id != "" || a != "") {
-        showCoordinate(Coordinate (g, a, v, p, c)).split(" ").toList.mkString(" AND ")
+    val forceVersions  = if (args.indexOf("--force-versions") != (-1)) true else false
+    
+
+    val searchTerm = if (!fullyQualified.isEmpty) {
+          String.format("fc:\"%s\"", fullyQualified)
+      } else if (!className.isEmpty) {
+          String.format("c:\"%s\"", className)
+      } else if (!group.isEmpty() || !artifact.isEmpty) {
+          showCoordinate(Coordinate (group, artifact, version, packaging, className)).split(" ").toList.mkString(" AND ")
       } else {
         args(0)
       }
+
+      // assume basic search if no formating is done
+      val basicSearch = (searchTerm == args(0))
     
-    val result = if (v != "" || fc != "") {
-      byCoordinate(searchTerm)
-    } else {
-      basic(searchTerm)
+    val coordSearch = ((!group.isEmpty && !artifact.isEmpty && forceVersions) ||
+      (!version.isEmpty) || (!className.isEmpty) || !fullyQualified.isEmpty)
+
+    val result = if (basicSearch) basic(searchTerm) else {
+        if (coordSearch || forceVersions) {
+        byCoordinate(searchTerm, forceVersions)
+      } else {
+        byClassname(searchTerm)
+      } 
     }
 
-    showResults(basic(searchTerm))
-
-    result match {
-      case IndexedSeq() => println("Search returned no results")
-      case _            => result.map (x => println(x))
+    val stringResults = result match {
+      case ClassVector(s) => showClassResults(s)
+      case CoordVector(d) => showCoordResults(d)
     }
+
+    if (stringResults.isEmpty) println("Search returned no results") else println(stringResults)
     
   }
 }
