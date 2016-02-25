@@ -1,4 +1,4 @@
-//package chavxo.maven_search
+package chavxo.maven_search
 
 // TODO: Optional search with OR
 
@@ -200,16 +200,19 @@ object MavenSearch {
   }
 
   def showCoordResults(results : Vector[CoordinateResult]) : String = {
-    //var grouped = null : Vector[Vector[ClassnameResult]]
-    //println(results)
     var res = ""
     val grouped = results.groupBy(x => x.groupId) //.map(x => x.groupBy(y => y.artifactId.takeWhile(_ != '_')))
     for (key <- grouped.keySet) {
       res += key + "\n"
       val regrouped = grouped(key).groupBy(x => x.artifactId)
       for (pkg <- regrouped.keySet) {
+        val versions = regrouped(pkg).map(x => x.version)
+        val stableVersion = versions.filter(!_.contains("SNAPSHOT")).max
         res += "  " + pkg + "\n"
-        res += "    " + regrouped(pkg).map(x => x.version).mkString(", ") + "\n"
+        res += "    stable: " + String.format("\"%s\"", key) + " %% " +
+          String.format("\"%s\"", pkg).takeWhile(_ != '_') + " % " + 
+          String.format("\"%s\"", stableVersion) + "\n"
+        res += "    others: " + versions.mkString(", ") + "\n"
       }
 
     }
@@ -252,8 +255,10 @@ object MavenSearch {
         args(0)
       }
 
-      // assume basic search if no formating is done
-      val basicSearch = (searchTerm == args(0))
+
+    // remove basic because it requires return type to be either class/coord
+    // assume basic search if no formating is done
+    val basicSearch = (searchTerm == args(0))
     
     val coordSearch = ((!group.isEmpty && !artifact.isEmpty && forceVersions) ||
       (!version.isEmpty) || (!className.isEmpty) || !fullyQualified.isEmpty)
