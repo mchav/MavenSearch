@@ -195,10 +195,26 @@ object MavenSearch {
   }
 
   private def printOptions() : Unit = {
-      println("Maven Search tool 0.0.1\n\tUsage: scala MavenSearch [package name]")
-      println("\t       scala MavenSearch [option] [argument]")
-      println("\nOptions:")
-      println("\t-g \tsearch for a group\n\t-fc \tsearch for a classname\n")
+      println("""
+Maven Search tool
+  scala MavenSearch [option] [argument]
+
+  Options:
+  
+  --fully-qualified : search by fully qualified package name
+  
+  --class : search by class name
+  
+  --group : search by groupId
+  
+  --artifact : search by artifactID
+  
+  --version-number : search by version number (used in conjunction with other options)
+  
+  --packaging : search by packaging (*.jar or *.pom)
+  
+  --classifier : search by classifier
+      """.trim+"\n")
   }
 
   /*
