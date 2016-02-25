@@ -1,4 +1,4 @@
-package chavxo.maven_search
+//package chavxo.maven_search
 
 // TODO: Optional search with OR
 
