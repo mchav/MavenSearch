@@ -236,7 +236,6 @@ object MavenSearch {
     val fullyQualified = getOption("--fully-qualified")
     val group          = getOption("--group")
     val artifact       = getOption("--artifact")
-    val id             = getOption("--id")
     val version        = getOption("--version-number")
     val packaging      = getOption("--packaging")
     val classifier     = getOption("--classifier")
