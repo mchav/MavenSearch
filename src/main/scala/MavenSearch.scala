@@ -40,6 +40,7 @@ object MavenSearch {
 
   /*
    * converts the cases of a coordinate into a search string
+   * e.g Coordinate(org.chav, chav) -> g:"org.chav"+AND+a:"chav"
    */
   private def showCoordinate (c : Coordinate) : String = {
     val group = if (c.groupId != "") {
@@ -57,6 +58,9 @@ object MavenSearch {
     return String.format("%s%s%s", group, artifact, version)
   }
 
+  /*
+   * constructs the search URL by attaching the options to the base url
+   */
   private def constructURL (queryString : String, hits : Int, resultType: String) : String = {
     val rows = String.valueOf(hits)
     val wt = resultType
@@ -70,6 +74,9 @@ object MavenSearch {
     complete
   }
 
+  /*
+   * convert timestamp to localdate
+   */
   private def timestampToDate(time: Double) : LocalDateTime = {
     val timeLong = (time).toLong
     val timeDate = new Date(timeLong)
@@ -78,11 +85,14 @@ object MavenSearch {
   } 
 
 
+  /*
+   * performs the equivalent of a maven advanced coordinate search and returns Coordinate result
+   */
   def byCoordinate(query : String, forceVersions : Boolean): CoordVector = {
     val url = constructURL(query, 20, "json") + (if (forceVersions) "&core=gav" else "")
     val res = downloadPackageInfo(
       url,
-      packageMap =>
+      packageMap => // package info function
         CoordinateResult (
           packageMap("g").asInstanceOf[String], 
           packageMap("a").asInstanceOf[String], 
@@ -93,6 +103,9 @@ object MavenSearch {
     CoordVector(res)
   }
 
+  /*
+   * parse result from JSON to class result
+   */
   private def parseClassResult(packageMap : Map[String, Any]) : ClassnameResult = {
     ClassnameResult (
       packageMap("g").asInstanceOf[String], 
@@ -103,12 +116,19 @@ object MavenSearch {
     ) 
   }
 
+
+  /*
+   * perfoms the equivalent of a maven advanced search by classname
+   */
   def byClassname(query : String): ClassVector = {
     val url = constructURL(query, 20, "json")
     val res = downloadPackageInfo(url, parseClassResult)
     ClassVector(res)
   }
 
+  /*
+   * equivalent to typing query into basic search box
+   */
   def basic(query: String) : ClassVector = {
     val url = constructURL(query, 20, "json")
     //println(url)
@@ -181,6 +201,9 @@ object MavenSearch {
       println("\t-g \tsearch for a group\n\t-fc \tsearch for a classname\n")
   }
 
+  /*
+   * return a string with the results in a format usable with sbt
+   */
   def showClassResults(results : Vector[ClassnameResult]) : String = {
     //var grouped = null : Vector[Vector[ClassnameResult]]
     //println(results)
@@ -199,9 +222,12 @@ object MavenSearch {
     return res
   }
 
+  /*
+   * return a string with the results in a format usable with sbt
+   */
   def showCoordResults(results : Vector[CoordinateResult]) : String = {
     var res = ""
-    val grouped = results.groupBy(x => x.groupId) //.map(x => x.groupBy(y => y.artifactId.takeWhile(_ != '_')))
+    val grouped = results.groupBy(x => x.groupId) 
     for (key <- grouped.keySet) {
       res += key + "\n"
       val regrouped = grouped(key).groupBy(x => x.artifactId)
@@ -220,19 +246,27 @@ object MavenSearch {
     return res
   }
 
+  /*
+   * CLI
+   */
   def main(args : Array[String]) : Unit = {
     if (args.length == 0 || args(0) == "--help") {
       printOptions()
       return
     }
 
+    // retrieves the ith + 1 entry after each given option
     def getOption(option : String) : String = {
       val index = args.indexOf(option)
-      if (index != (-1)) 
+      if (index != (-1)) {
+        if (index + 1 >= args.length) return ""
+        if (args(index + 1).startsWith("--")) return ""
         return args(index + 1)
+      }
       return ""
     }
 
+    // terminal options
     val fullyQualified = getOption("--fully-qualified")
     val group          = getOption("--group")
     val artifact       = getOption("--artifact")
@@ -241,9 +275,10 @@ object MavenSearch {
     val classifier     = getOption("--classifier")
     val className      = getOption("--class")
 
+    // forced versions flag coerces the return value to a coordinate (i.e versions as opposed to latest)
     val forceVersions  = if (args.indexOf("--force-versions") != (-1)) true else false
     
-
+    // construct string options
     val searchTerm = if (!fullyQualified.isEmpty) {
           String.format("fc:\"%s\"", fullyQualified)
       } else if (!className.isEmpty) {
@@ -251,14 +286,21 @@ object MavenSearch {
       } else if (!group.isEmpty() || !artifact.isEmpty) {
           showCoordinate(Coordinate (group, artifact, version, packaging, className)).split(" ").toList.mkString(" AND ")
       } else {
-        args(0)
+        if (args(0).startsWith("--")) "" else args(0)
       }
+
+    if (searchTerm == "") {
+      println("Ill-formed search term")
+      printOptions()
+      return 
+    }
 
 
     // remove basic because it requires return type to be either class/coord
     // assume basic search if no formating is done
-    val basicSearch = (searchTerm == args(0))
+    val basicSearch = (args.length == 1)
     
+    // determine whether or not to perform a coordsearch (see README)
     val coordSearch = ((!group.isEmpty && !artifact.isEmpty && forceVersions) ||
       (!version.isEmpty) || (!className.isEmpty) || !fullyQualified.isEmpty)
 
