@@ -7,11 +7,17 @@ Prototype for the search component of a build tool.
 Options:
 
 --fully-qualified  : search by fully qualified package name
+
 --class            : search by class name
+
 --group            : search by groupId
+
 --artifact         : search by artifactID
+
 --version-number   : search by version number (used in conjunction with other options)
+
 --packaging        : search by packaging (*.jar or *.pom)
+
 --classifier       : search by classifier
 
 
