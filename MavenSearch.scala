@@ -195,8 +195,8 @@ object MavenSearch {
       }
 
     }
-    println(res)
-    return ""
+    
+    return res
   }
 
   def showCoordResults(results : Vector[CoordinateResult]) : String = {
@@ -207,17 +207,17 @@ object MavenSearch {
       val regrouped = grouped(key).groupBy(x => x.artifactId)
       for (pkg <- regrouped.keySet) {
         val versions = regrouped(pkg).map(x => x.version)
-        val stableVersion = versions.filter(!_.contains("SNAPSHOT")).max
+        val stableVersion = versions.filter(!_.contains("SNAP")).max
         res += "  " + pkg + "\n"
         res += "    stable: " + String.format("\"%s\"", key) + " %% " +
-          String.format("\"%s\"", pkg).takeWhile(_ != '_') + " % " + 
+          String.format("\"%s\"", pkg.takeWhile(_ != '_')) + " % " + 
           String.format("\"%s\"", stableVersion) + "\n"
         res += "    others: " + versions.mkString(", ") + "\n"
       }
 
     }
-    println(res)
-    return ""
+  
+    return res
   }
 
   def main(args : Array[String]) : Unit = {
