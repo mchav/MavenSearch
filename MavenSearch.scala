@@ -1,3 +1,5 @@
+package chavxo.maven_search
+
 // TODO: Optional search with OR
 
 import java.net._ 
@@ -35,13 +37,9 @@ case class Coordinate(
 object MavenSearch {
   private val baseUrl = "http://search.maven.org/solrsearch/select?"
   private val charset = java.nio.charset.StandardCharsets.UTF_8.name()
-  private val options = Array("--fully-qualified", "--class", 
-    "--group", "--artifact", "--version-number", "--packaging", "--classifier",
-    "--force-versions", "--scala-version")
 
   /*
    * converts the cases of a coordinate into a search string
-   * e.g Coordinate(org.chav, chav) -> g:"org.chav"+AND+a:"chav"
    */
   private def showCoordinate (c : Coordinate) : String = {
     val group = if (c.groupId != "") {
@@ -59,9 +57,6 @@ object MavenSearch {
     return String.format("%s%s%s", group, artifact, version)
   }
 
-  /*
-   * constructs the search URL by attaching the options to the base url
-   */
   private def constructURL (queryString : String, hits : Int, resultType: String) : String = {
     val rows = String.valueOf(hits)
     val wt = resultType
@@ -75,9 +70,6 @@ object MavenSearch {
     complete
   }
 
-  /*
-   * convert timestamp to localdate
-   */
   private def timestampToDate(time: Double) : LocalDateTime = {
     val timeLong = (time).toLong
     val timeDate = new Date(timeLong)
@@ -86,14 +78,11 @@ object MavenSearch {
   } 
 
 
-  /*
-   * performs the equivalent of a maven advanced coordinate search and returns Coordinate result
-   */
   def byCoordinate(query : String, forceVersions : Boolean): CoordVector = {
     val url = constructURL(query, 20, "json") + (if (forceVersions) "&core=gav" else "")
     val res = downloadPackageInfo(
       url,
-      packageMap => // package info function
+      packageMap =>
         CoordinateResult (
           packageMap("g").asInstanceOf[String], 
           packageMap("a").asInstanceOf[String], 
@@ -104,9 +93,6 @@ object MavenSearch {
     CoordVector(res)
   }
 
-  /*
-   * parse result from JSON to class result
-   */
   private def parseClassResult(packageMap : Map[String, Any]) : ClassnameResult = {
     ClassnameResult (
       packageMap("g").asInstanceOf[String], 
@@ -117,19 +103,12 @@ object MavenSearch {
     ) 
   }
 
-
-  /*
-   * perfoms the equivalent of a maven advanced search by classname
-   */
   def byClassname(query : String): ClassVector = {
     val url = constructURL(query, 20, "json")
     val res = downloadPackageInfo(url, parseClassResult)
     ClassVector(res)
   }
 
-  /*
-   * equivalent to typing query into basic search box
-   */
   def basic(query: String) : ClassVector = {
     val url = constructURL(query, 20, "json")
     //println(url)
@@ -196,31 +175,12 @@ object MavenSearch {
   }
 
   private def printOptions() : Unit = {
-      println("""
-Maven Search tool
-  scala MavenSearch [option] [argument]
-
-  Options:
-  
-  --fully-qualified : search by fully qualified package name
-  
-  --class : search by class name
-  
-  --group : search by groupId
-  
-  --artifact : search by artifactID
-  
-  --version-number : search by version number (used in conjunction with other options)
-  
-  --packaging : search by packaging (*.jar or *.pom)
-  
-  --classifier : search by classifier
-      """.trim+"\n")
+      println("Maven Search tool 0.0.1\n\tUsage: scala MavenSearch [package name]")
+      println("\t       scala MavenSearch [option] [argument]")
+      println("\nOptions:")
+      println("\t-g \tsearch for a group\n\t-fc \tsearch for a classname\n")
   }
 
-  /*
-   * return a string with the results in a format usable with sbt
-   */
   def showClassResults(results : Vector[ClassnameResult]) : String = {
     //var grouped = null : Vector[Vector[ClassnameResult]]
     //println(results)
@@ -239,87 +199,51 @@ Maven Search tool
     return res
   }
 
-  private def semanticVersionLessThan(left: String, right: String) = {
-    def toInt(str: String): Either[Int,String] = try {
-      Left(str.toInt)
-    } catch {
-      case e: NumberFormatException => Right(str)
-    }
-    // FIXME: this ignores ends when different size
-    val zipped = left.split("\\.|\\-").map(toInt) zip right.split("\\.|\\-").map(toInt)
-    val res = zipped.map {
-      case (Left(i),Left(j)) => i compare j
-      case (Right(i),Right(j)) => i compare j
-      case (Left(i),Right(j)) => i.toString compare j
-      case (Right(i),Left(j)) => i compare j.toString
-    }
-    res.find(_ != 0).map(_ < 0).getOrElse(false)
-  }
-
-  private def stableVersion(version: String) = version.replaceAll("[0-9\\.]*","") == ""
-
-  /*
-   * return a string with the results in a format usable with sbt
-   */
   def showCoordResults(results : Vector[CoordinateResult]) : String = {
-      results
-        .groupBy( x => (x.groupId, x.artifactId) )
-        .mapValues(
-          _.sortBy(_.version)( Ordering.fromLessThan(semanticVersionLessThan) )
-           .reverse
-        )
-        .toList
-        .sortBy(_._1)
-        .map{ case ( (groupId, artifactId), results ) =>
-          val versions = results.map(_.version)
-          val stable = versions.filter(stableVersion).headOption
-          val sbtStable = stable.map{ v => s"""\"$groupId\" %% ${artifactId.takeWhile(_ != '_')} % \"$v\"""" }
-          val others = versions.filterNot(Some(_) == stable).mkString(", ")
-          s"""
-  $groupId %% $artifactId
-    stable: ${sbtStable.getOrElse("-")}
-    others: ${others}"""
-        }.mkString("\n")
+    var res = ""
+    val grouped = results.groupBy(x => x.groupId) //.map(x => x.groupBy(y => y.artifactId.takeWhile(_ != '_')))
+    for (key <- grouped.keySet) {
+      res += key + "\n"
+      val regrouped = grouped(key).groupBy(x => x.artifactId)
+      for (pkg <- regrouped.keySet) {
+        val versions = regrouped(pkg).map(x => x.version)
+        val stableVersion = versions.filter(!_.contains("SNAP")).max
+        res += "  " + pkg + "\n"
+        res += "    stable: " + String.format("\"%s\"", key) + " %% " +
+          String.format("\"%s\"", pkg.takeWhile(_ != '_')) + " % " + 
+          String.format("\"%s\"", stableVersion) + "\n"
+        res += "    others: " + versions.mkString(", ") + "\n"
+      }
+
+    }
+  
+    return res
   }
 
-  /*
-   * CLI
-   */
   def main(args : Array[String]) : Unit = {
     if (args.length == 0 || args(0) == "--help") {
       printOptions()
       return
     }
 
-    // retrieves the ith + 1 entry after each given option
     def getOption(option : String) : String = {
       val index = args.indexOf(option)
-      if (index != (-1)) {
-        if (index + 1 >= args.length) return ""
-        if (args(index + 1).startsWith("--")) return ""
+      if (index != (-1)) 
         return args(index + 1)
-      }
       return ""
     }
 
-    // terminal options
     val fullyQualified = getOption("--fully-qualified")
     val group          = getOption("--group")
-    val artifactArg    = getOption("--artifact")
+    val artifact       = getOption("--artifact")
     val version        = getOption("--version-number")
     val packaging      = getOption("--packaging")
     val classifier     = getOption("--classifier")
     val className      = getOption("--class")
-    val scalaArg       = getOption("--scala-version")
 
-    // forced versions flag coerces the return value to a coordinate (i.e versions as opposed to latest)
     val forceVersions  = if (args.indexOf("--force-versions") != (-1)) true else false
-
-    val scalaVersion = if (scalaArg == "") "_2.11" else "_" + scalaArg
-
-    val artifact = if (artifactArg == "") artifactArg else artifactArg + scalaVersion
     
-    // construct string options
+
     val searchTerm = if (!fullyQualified.isEmpty) {
           String.format("fc:\"%s\"", fullyQualified)
       } else if (!className.isEmpty) {
@@ -327,21 +251,14 @@ Maven Search tool
       } else if (!group.isEmpty() || !artifact.isEmpty) {
           showCoordinate(Coordinate (group, artifact, version, packaging, className)).split(" ").toList.mkString(" AND ")
       } else {
-        if (args(0).startsWith("--")) "" else args(0)
+        args(0)
       }
-
-    if (searchTerm == "") {
-      println("Ill-formed search term")
-      printOptions()
-      return 
-    }
 
 
     // remove basic because it requires return type to be either class/coord
     // assume basic search if no formating is done
-    val basicSearch = (args.length == 1)
+    val basicSearch = (searchTerm == args(0))
     
-    // determine whether or not to perform a coordsearch (see README)
     val coordSearch = ((!group.isEmpty && !artifact.isEmpty && forceVersions) ||
       (!version.isEmpty) || (!className.isEmpty) || !fullyQualified.isEmpty)
 
