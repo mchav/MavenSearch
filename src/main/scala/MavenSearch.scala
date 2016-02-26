@@ -195,10 +195,26 @@ object MavenSearch {
   }
 
   private def printOptions() : Unit = {
-      println("Maven Search tool 0.0.1\n\tUsage: scala MavenSearch [package name]")
-      println("\t       scala MavenSearch [option] [argument]")
-      println("\nOptions:")
-      println("\t-g \tsearch for a group\n\t-fc \tsearch for a classname\n")
+      println("""
+Maven Search tool
+  scala MavenSearch [option] [argument]
+
+  Options:
+  
+  --fully-qualified : search by fully qualified package name
+  
+  --class : search by class name
+  
+  --group : search by groupId
+  
+  --artifact : search by artifactID
+  
+  --version-number : search by version number (used in conjunction with other options)
+  
+  --packaging : search by packaging (*.jar or *.pom)
+  
+  --classifier : search by classifier
+      """.trim+"\n")
   }
 
   /*
@@ -222,28 +238,47 @@ object MavenSearch {
     return res
   }
 
+  private def semanticVersionLessThan(left: String, right: String) = {
+    def toInt(str: String): Either[Int,String] = try {
+      Left(str.toInt)
+    } catch {
+      case e: NumberFormatException => Right(str)
+    }
+    // FIXME: this ignores ends when different size
+    val zipped = left.split("\\.|\\-").map(toInt) zip right.split("\\.|\\-").map(toInt)
+    val res = zipped.map {
+      case (Left(i),Left(j)) => i compare j
+      case (Right(i),Right(j)) => i compare j
+      case (Left(i),Right(j)) => i.toString compare j
+      case (Right(i),Left(j)) => i compare j.toString
+    }
+    res.find(_ != 0).map(_ < 0).getOrElse(false)
+  }
+
+  private def stableVersion(version: String) = version.replaceAll("[0-9\\.]*","") == ""
+
   /*
    * return a string with the results in a format usable with sbt
    */
   def showCoordResults(results : Vector[CoordinateResult]) : String = {
-    var res = ""
-    val grouped = results.groupBy(x => x.groupId) 
-    for (key <- grouped.keySet) {
-      res += key + "\n"
-      val regrouped = grouped(key).groupBy(x => x.artifactId)
-      for (pkg <- regrouped.keySet) {
-        val versions = regrouped(pkg).map(x => x.version)
-        val stableVersion = versions.filter(!_.contains("SNAP")).max
-        res += "  " + pkg + "\n"
-        res += "    stable: " + String.format("\"%s\"", key) + " %% " +
-          String.format("\"%s\"", pkg.takeWhile(_ != '_')) + " % " + 
-          String.format("\"%s\"", stableVersion) + "\n"
-        res += "    others: " + versions.mkString(", ") + "\n"
-      }
-
-    }
-  
-    return res
+      results
+        .groupBy( x => (x.groupId, x.artifactId) )
+        .mapValues(
+          _.sortBy(_.version)( Ordering.fromLessThan(semanticVersionLessThan) )
+           .reverse
+        )
+        .toList
+        .sortBy(_._1)
+        .map{ case ( (groupId, artifactId), results ) =>
+          val versions = results.map(_.version)
+          val stable = versions.filter(stableVersion).headOption
+          val sbtStable = stable.map{ v => s"""\"$groupId\" %% ${artifactId.takeWhile(_ != '_')} % \"$v\"""" }
+          val others = versions.filterNot(Some(_) == stable).mkString(", ")
+          s"""
+  $groupId %% $artifactId
+    stable: ${sbtStable.getOrElse("-")}
+    others: ${others}"""
+        }.mkString("\n")
   }
 
   /*

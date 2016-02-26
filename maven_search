@@ -1,4 +1,17 @@
 #!/bin/sh
-cd $(dirname $(readlink "$0"))
-mkdir -p target
-scalac -d target MavenSearch.scala && scala -cp target chavxo.maven_search.MavenSearch $*
+DIR=$(dirname $(readlink "$0") 2>/dev/null || dirname "$0" 2>/dev/null )
+cd $DIR
+TARGET=target/scala-2.11/classes
+SRC_FILE=src/main/scala/MavenSearch.scala
+mkdir -p $TARGET
+RES=$?
+if [ $SRC_FILE -nt $TARGET/MavenSearch.class ]
+then
+	scalac -d $TARGET $SRC_FILE
+	RES=$?
+fi
+if [ $RES -eq 0 ]
+then
+	scala -cp $TARGET MavenSearch $*
+fi
+#chavxo.maven_search.MavenSearch $*
