@@ -40,7 +40,7 @@ The combination of these three return values is referred to in the API as a Coor
 Alternatively you can search by Classname as follows:
 
 
-`scala MavenSearch [-class] [Class Name]`
+`scala MavenSearch [--class] [Class Name]`
 
 You can also run a compound search. Say for example you wanted to version 3.0 of org.workingmouse's scalaz package. The query would be:
 
