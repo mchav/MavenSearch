@@ -1,5 +1,5 @@
 # MavenSearch
-Prototype for the search component of a build tool.
+Prototype for the search component of a build tool. The project uses no additional dependencies. Option parsing is done manually and JSON parsing is done using the standard Scala library. The output is printed such that the results can easily be copied and pasted to sbt or any similar build tool.
 
 # Usage
 `maven_search [option] [argument]`
@@ -45,7 +45,13 @@ Alternatively you can search by Classname as follows:
 You can also run a compound search. Say for example you wanted to version 3.0 of org.workingmouse's scalaz package. The query would be:
 
 
-`maven_search --group org.workingmouse -artifact scalaz --version-number 3.0`
+`maven_search --group org.workingmouse --artifact scalaz --version-number 3.0`
+Returns:
+
+`  com.workingmouse %% scalaz
+    stable: "com.workingmouse" %% scalaz % "3.0"
+    others: 2.5, 2.4, 2.3, 2.2`
+
 
 This search returns a CoordinateResult. Leaving out `-version-number 3.0` from the search query would return a result of type ClassnameResult.
 
