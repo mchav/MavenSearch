@@ -26,7 +26,7 @@ case class CoordVector(value: Vector[CoordinateResult])
 
 case class Coordinate(
   groupId: String,
-  artifactId: String,
+  artifacts: List[String], // allows for the artifacts to have different scala/hava versions
   version: String,
   packaging: String,
   classifier: String
@@ -48,15 +48,15 @@ object MavenSearch {
     String.format("g:\"%s\" ", c.groupId)
     } else ""
 
-    val artifact = if (c.artifactId != "") {
-    String.format("a:\"%s\" ", c.artifactId)
+    val artifact = if (!c.artifacts.isEmpty) {
+    	c.artifacts.map(x => String.format("a:\"%s\"", x)).mkString("+OR+")
     } else ""
 
     val version = if (c.version != "") {
     String.format("v:\"%s\" ", c.version)
     } else ""
 
-    return String.format("%s%s%s", group, artifact, version)
+    String.format("%s%s%s", group, artifact, version)
   }
 
   /*
@@ -67,11 +67,11 @@ object MavenSearch {
     val wt = resultType
 
     val complete = String.format(baseUrl + "q=%s&rows=%s&wt=%s", 
-      URLEncoder.encode(queryString, charset), 
+      queryString.split('+').map(URLEncoder.encode(_, charset)).mkString("+"), // accommodate compounded OR in artfact 
       URLEncoder.encode(rows, charset),
       URLEncoder.encode(wt, charset)
     )
-    // println(complete)
+    println(URLDecoder.decode(complete, charset))
     complete
   }
 
@@ -132,7 +132,6 @@ object MavenSearch {
    */
   def basic(query: String) : ClassVector = {
     val url = constructURL(query, 20, "json")
-    //println(url)
     val res = downloadPackageInfo(url, parseClassResult)
     ClassVector(res)
   }
@@ -198,7 +197,7 @@ object MavenSearch {
   private def printOptions() : Unit = {
       println("""
 Maven Search tool
-  scala MavenSearch [option] [argument]
+  scala MavenSearch [option] [argument] [flag]
 
   Options:
   
@@ -215,17 +214,21 @@ Maven Search tool
   --packaging : search by packaging (*.jar or *.pom)
   
   --classifier : search by classifier
-      """.trim+"\n")
+  
+  --scala-version : include scala version of artifact. Default is 2.11
+
+  Flags:
+
+  --force-versions : coerces the output to coordinate type
+     """.trim+"\n")
   }
 
   /*
    * return a string with the results in a format usable with sbt
    */
   def showClassResults(results : Vector[ClassnameResult]) : String = {
-    //var grouped = null : Vector[Vector[ClassnameResult]]
-    //println(results)
     var res = ""
-    val grouped = results.groupBy(x => x.groupId) //.map(x => x.groupBy(y => y.artifactId.takeWhile(_ != '_')))
+    val grouped = results.groupBy(x => x.groupId) 
     for (key <- grouped.keySet) {
       res += key + "\n"
       val regrouped = grouped(key).groupBy(x => x.artifactId)
@@ -274,7 +277,9 @@ Maven Search tool
           val versions = results.map(_.version)
           val stable = versions.filter(stableVersion).headOption
           val sbtStable = stable.map{ v => s"""\"$groupId\" %% ${artifactId.takeWhile(_ != '_')} % \"$v\"""" }
-          val others = versions.filterNot(Some(_) == stable).mkString(", ")
+          val otherVersions = versions.filterNot(Some(_) == stable).mkString(", ")
+          val others = if (otherVersions.isEmpty) "-" else otherVersions
+          val date = "\\\\"
           s"""
   $groupId %% $artifactId
     stable: ${sbtStable.getOrElse("-")}
@@ -291,6 +296,15 @@ Maven Search tool
       return
     }
 
+    val argOptions = args.filter( _.startsWith("--"))
+    for (argOption <- argOptions){
+      if (!options.contains(argOption)) {
+        println("Unknown option: " + argOption)
+        printOptions()
+        return
+      }
+    }
+
     // retrieves the ith + 1 entry after each given option
     def getOption(option : String) : String = {
       val index = args.indexOf(option)
@@ -305,7 +319,7 @@ Maven Search tool
     // terminal options
     val fullyQualified = getOption("--fully-qualified")
     val group          = getOption("--group")
-    val artifactArg    = getOption("--artifact")
+    val artifact       = getOption("--artifact")
     val version        = getOption("--version-number")
     val packaging      = getOption("--packaging")
     val classifier     = getOption("--classifier")
@@ -315,17 +329,17 @@ Maven Search tool
     // forced versions flag coerces the return value to a coordinate (i.e versions as opposed to latest)
     val forceVersions  = if (args.indexOf("--force-versions") != (-1)) true else false
 
-    val scalaVersion = if (scalaArg == "") "_2.11" else "_" + scalaArg
+    val searchSuffixes = List("", "_2.10", "_2.11")
 
-    val artifact = if (artifactArg == "") artifactArg else artifactArg + scalaVersion
+    val artifacts = (List(artifact, artifact, artifact), searchSuffixes).zipped map(_ + _)
     
     // construct string options
     val searchTerm = if (!fullyQualified.isEmpty) {
           String.format("fc:\"%s\"", fullyQualified)
       } else if (!className.isEmpty) {
           String.format("c:\"%s\"", className)
-      } else if (!group.isEmpty() || !artifact.isEmpty) {
-          showCoordinate(Coordinate (group, artifact, version, packaging, className)).split(" ").toList.mkString(" AND ")
+      } else if (!group.isEmpty() || !artifacts.isEmpty) {
+          showCoordinate(Coordinate (group, artifacts, version, packaging, className)).split(" ").toList.mkString(" AND ")
       } else {
         if (args(0).startsWith("--")) "" else args(0)
       }
@@ -345,13 +359,15 @@ Maven Search tool
     val coordSearch = ((!group.isEmpty && !artifact.isEmpty && forceVersions) ||
       (!version.isEmpty) || (!className.isEmpty) || !fullyQualified.isEmpty)
 
-    val result = if (basicSearch) basic(searchTerm) else {
+    val searchFunction = if (basicSearch) (x : String) => basic(x) else {
         if (coordSearch || forceVersions) {
-        byCoordinate(searchTerm, forceVersions)
+        (x : String) => byCoordinate(x, forceVersions)
       } else {
-        byClassname(searchTerm)
+        (x : String) => byClassname(x)
       } 
     }
+
+    val result = searchFunction(searchTerm)
 
     val stringResults = result match {
       case ClassVector(s) => showClassResults(s)
