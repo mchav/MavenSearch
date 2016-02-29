@@ -48,9 +48,11 @@ You can also run a compound search. Say for example you wanted to version 3.0 of
 `maven_search --group org.workingmouse --artifact scalaz --version-number 3.0`
 Returns:
 
-`  com.workingmouse %% scalaz
-    stable: "com.workingmouse" %% scalaz % "3.0"
-    others: 2.5, 2.4, 2.3, 2.2`
+`  com.workingmouse %% scalaz`
+
+    `stable: "com.workingmouse" %% scalaz % "3.0"`
+    
+    `others: 2.5, 2.4, 2.3, 2.2``
 
 
 This search returns a CoordinateResult. Leaving out `-version-number 3.0` from the search query would return a result of type ClassnameResult.
