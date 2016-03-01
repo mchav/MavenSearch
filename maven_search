@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 DIR=$(dirname $(readlink "$0") 2>/dev/null || dirname "$0" 2>/dev/null )
 cd $DIR
 TARGET=target/scala-2.11/classes

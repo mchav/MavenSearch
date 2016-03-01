@@ -247,6 +247,7 @@ Maven Search tool
     } catch {
       case e: NumberFormatException => Right(str)
     }
+
     // FIXME: this ignores ends when different size
     val zipped = left.split("\\.|\\-").map(toInt) zip right.split("\\.|\\-").map(toInt)
     val res = zipped.map {
