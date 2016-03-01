@@ -330,7 +330,7 @@ Maven Search tool
 
     val searchSuffixes = List("", "_2.10", "_2.11")
 
-    val artifacts = (List.fill(3)(artifact), searchSuffixes).zipped map(_ + _)
+    val artifacts = (List.fill(searchSuffixes.length)(artifact), searchSuffixes).zipped map(_ + _)
     
     // construct string options
     val searchTerm = if (!fullyQualified.isEmpty) {
