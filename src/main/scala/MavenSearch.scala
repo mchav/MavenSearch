@@ -63,6 +63,7 @@ object MavenSearch {
    * constructs the search URL by attaching the options to the base url
    */
   private def constructURL (queryString : String, hits : Int, resultType: String) : String = {
+    println(queryString)
     val rows = String.valueOf(hits)
     val wt = resultType
 
@@ -338,7 +339,7 @@ Maven Search tool
           String.format("fc:\"%s\"", fullyQualified)
       } else if (!className.isEmpty) {
           String.format("c:\"%s\"", className)
-      } else if (!group.isEmpty() || !artifacts.isEmpty) {
+      } else if (!group.isEmpty() || !artifact.isEmpty) {
           showCoordinate(Coordinate (group, artifacts, version, packaging, className)).split(" ").toList.mkString(" AND ")
       } else {
         if (args(0).startsWith("--")) "" else args(0)
