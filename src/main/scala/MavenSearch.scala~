@@ -71,6 +71,7 @@ object MavenSearch {
       URLEncoder.encode(rows, charset),
       URLEncoder.encode(wt, charset)
     )
+    println(URLDecoder.decode(complete, charset))
     complete
   }
 
