@@ -4,6 +4,7 @@ cd $DIR
 TARGET=target/scala-2.11/classes
 SRC_FILE=src/main/scala/MavenSearch.scala
 mkdir -p $TARGET
+scalac -d $TARGET $SRC_FILE
 RES=$?
 if [ $SRC_FILE -nt $TARGET/MavenSearch.class ]
 then
