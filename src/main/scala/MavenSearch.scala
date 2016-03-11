@@ -357,7 +357,7 @@ Maven Search tool
     val coordSearch = ((!group.isEmpty && !artifact.isEmpty && forceVersions) ||
       (!version.isEmpty) || (!className.isEmpty) || !fullyQualified.isEmpty)
 
-    val searchFunction = if (basicSearch) (x : String) => basic(x) else {
+    val searchFunction = if (basicSearch) (x : String) => basic(x+"?") else { //wild card search
         if (coordSearch || forceVersions) {
         (x : String) => byCoordinate(x, forceVersions)
       } else {
