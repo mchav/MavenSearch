@@ -63,7 +63,6 @@ object MavenSearch {
    * constructs the search URL by attaching the options to the base url
    */
   private def constructURL (queryString : String, hits : Int, resultType: String) : String = {
-    println(queryString)
     val rows = String.valueOf(hits)
     val wt = resultType
 
@@ -227,19 +226,17 @@ Maven Search tool
    * return a string with the results in a format usable with sbt
    */
   def showClassResults(results : Vector[ClassnameResult]) : String = {
-    var res = ""
-    val grouped = results.groupBy(x => x.groupId) 
-    for (key <- grouped.keySet) {
-      res += key + "\n"
-      val regrouped = grouped(key).groupBy(x => x.artifactId)
-      for (pkg <- regrouped.keySet) {
-        res += "  " + pkg + "\n"
-        res += "    latest version: " + regrouped(pkg).map(x => x.latestVersion).mkString(", ") + "\n"
-      }
-
-    }
-    
-    return res
+    results
+        .groupBy( x => (x.groupId, x.artifactId, x.latestVersion) )
+        .mapValues(
+          _.sortBy(_.latestVersion)( Ordering.fromLessThan(semanticVersionLessThan) )
+           .reverse
+        )
+        .toList
+        .sortBy(_._1)
+        .map{ case ( (groupId, artifactId, latestVersion), results ) =>
+          s"""\"$groupId\" %% \"${artifactId.takeWhile(_ != '_')}\" % \"$latestVersion\"""" 
+        }.mkString("\n")
   }
 
   private def semanticVersionLessThan(left: String, right: String) = {
@@ -277,7 +274,7 @@ Maven Search tool
         .map{ case ( (groupId, artifactId), results ) =>
           val versions = results.map(_.version)
           val stable = versions.filter(stableVersion).headOption
-          val sbtStable = stable.map{ v => s"""\"$groupId\" %% ${artifactId.takeWhile(_ != '_')} % \"$v\"""" }
+          val sbtStable = stable.map{ v => s"""\"$groupId\" %% \"${artifactId.takeWhile(_ != '_')}\" % \"$v\"""" }
           val otherVersions = versions.filterNot(Some(_) == stable).mkString(", ")
           val others = if (otherVersions.isEmpty) "-" else otherVersions
           val date = "\\\\"
@@ -375,7 +372,6 @@ Maven Search tool
       case CoordVector(d) => showCoordResults(d)
     }
 
-    if (stringResults.isEmpty) println("Search returned no results") else println(stringResults)
-    
+    if (stringResults.isEmpty) println(s"""Search for returned ${searchTerm} no results""") else println(stringResults)
   }
 }
